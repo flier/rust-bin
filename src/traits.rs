@@ -30,7 +30,7 @@ use quote::ToTokens;
 /// assert_eq!(parse_rust_bin_lit::<NativeEndian>("0b111", true).unwrap(), &[0xF9]);
 /// assert_eq!(parse_rust_bin_lit::<NativeEndian>("3.14", true).unwrap(),
 ///            &[195, 245, 72, 192]);
-/// assert_eq!(parse_rust_bin_lit::<NativeEndian>("000102030405060708090a0b0c0d0e0f", true).unwrap(),
+/// assert_eq!(parse_rust_bin_lit::<NativeEndian>("000102030405060708090a0b0c0d0e0f", false).unwrap(),
 ///            &[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]);
 /// # }
 /// ```
@@ -46,11 +46,11 @@ where
                 parse_lit_expr::<E>(&mut bytes, lit, is_negative)?;
             }
             Ok(expr) => panic!("unsupport expr, {:?}", expr),
-            Err(err) => if code.len() % 2 == 0 && code.chars().all(|c| match c {
+            Err(err) => if input.len() % 2 == 0 && input.chars().all(|c| match c {
                 '0'...'9' | 'a'...'f' | 'A'...'F' => true,
                 _ => false,
             }) {
-                let mut chars = code.chars();
+                let mut chars = input.chars();
 
                 while let (Some(hi), Some(lo)) = (
                     chars.next().and_then(|c| c.to_digit(16)),
