@@ -54,6 +54,8 @@ const MIXED_SLICE: &[u8] = bin![
     true
 ];
 
+const HEX: &[u8] = bin![000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f];
+
 #[test]
 fn test_literal() {
     assert_eq!(STR, b"hello");
@@ -70,7 +72,22 @@ fn test_literal() {
     assert_eq!(
         I128,
         &[
-            0, 0, 0, 0, 0, 0, 0, 0x80, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0x80,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF
         ]
     );
     assert_eq!(
@@ -96,8 +113,22 @@ fn test_literal() {
     assert_eq!(
         bin![340_282_366_920_938_463_463_374_607_431_768_211_455],
         &[
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            0xFF, 0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF
         ]
     );
 
@@ -109,8 +140,22 @@ fn test_literal() {
     assert_eq!(
         U128_MAX,
         &[
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            0xFF, 0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF
         ]
     );
     assert_eq!(USIZE, &[0, 0, 0, 0, 0, 0, 0, 0x80]);
@@ -136,6 +181,44 @@ fn test_literal() {
 
     assert_eq!(TRUE, &[1]);
     assert_eq!(FALSE, &[0]);
+
+    assert_eq!(
+        HEX,
+        &[
+            0x00,
+            0x01,
+            0x02,
+            0x03,
+            0x04,
+            0x05,
+            0x06,
+            0x07,
+            0x08,
+            0x09,
+            0x0a,
+            0x0b,
+            0x0c,
+            0x0d,
+            0x0e,
+            0x0f,
+            0x10,
+            0x11,
+            0x12,
+            0x13,
+            0x14,
+            0x15,
+            0x16,
+            0x17,
+            0x18,
+            0x19,
+            0x1a,
+            0x1b,
+            0x1c,
+            0x1d,
+            0x1e,
+            0x1f
+        ]
+    );
 }
 
 #[test]
