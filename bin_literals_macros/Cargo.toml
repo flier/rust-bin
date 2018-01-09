@@ -4,8 +4,10 @@ version = "0.1.0"
 authors = ["Flier Lu <flier.lu@gmail.com>"]
 
 [dependencies]
-bin = { path = "../", version = "0.1" }
+byteorder = "1.2"
 procedural-masquerade = "0.1"
+
+bin = { path = "../", version = "0.1" }
 
 [lib]
 proc-macro = true

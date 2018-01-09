@@ -3,7 +3,7 @@ use std::{isize, slice, usize, f32, i16, i32, i64, i8, u16, u32, u64, u8};
 use syn;
 use bytes::BufMut;
 use failure::Error;
-use byteorder::{ByteOrder, NativeEndian};
+use byteorder::ByteOrder;
 use extprim::u128::{BYTES as U128_BYTES, u128};
 use extprim::i128::{BYTES as I128_BYTES, i128};
 use quote::ToTokens;
@@ -15,22 +15,35 @@ use quote::ToTokens;
 /// # Examples
 ///
 /// ```rust
-/// use bin::traits::parse_rust_bin_lit;
-///
-/// assert_eq!(parse_rust_bin_lit("0, 1", false).unwrap(), &[0, 1]);
-/// assert_eq!(parse_rust_bin_lit("\"你好\"", false).unwrap(),
+/// # extern crate byteorder;
+/// # extern crate bin;
+/// #
+/// # use byteorder::NativeEndian;
+/// #
+/// # use bin::traits::parse_rust_bin_lit;
+/// #
+/// #
+/// # fn main() {
+/// assert_eq!(parse_rust_bin_lit::<NativeEndian>("0, 1", false).unwrap(), &[0, 1]);
+/// assert_eq!(parse_rust_bin_lit::<NativeEndian>("\"你好\"", false).unwrap(),
 ///            &[228, 189, 160, 229, 165, 189]);
-/// assert_eq!(parse_rust_bin_lit("0b111", true).unwrap(), &[0xF9]);
-/// assert_eq!(parse_rust_bin_lit("3.14", true).unwrap(),
+/// assert_eq!(parse_rust_bin_lit::<NativeEndian>("0b111", true).unwrap(), &[0xF9]);
+/// assert_eq!(parse_rust_bin_lit::<NativeEndian>("3.14", true).unwrap(),
 ///            &[195, 245, 72, 192]);
+/// assert_eq!(parse_rust_bin_lit::<NativeEndian>("000102030405060708090a0b0c0d0e0f", true).unwrap(),
+///            &[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]);
+/// # }
 /// ```
-pub fn parse_rust_bin_lit(code: &str, is_negative: bool) -> Result<Vec<u8>, Error> {
+pub fn parse_rust_bin_lit<E>(code: &str, is_negative: bool) -> Result<Vec<u8>, Error>
+where
+    E: ByteOrder,
+{
     let mut bytes = vec![];
 
     for input in code.split(',').map(|s| s.trim()).collect::<Vec<&str>>() {
         match syn::parse_str::<syn::Expr>(input) {
             Ok(syn::Expr::Lit(syn::ExprLit { lit, .. })) => {
-                parse_lit_expr::<NativeEndian>(&mut bytes, lit, is_negative)?;
+                parse_lit_expr::<E>(&mut bytes, lit, is_negative)?;
             }
             Ok(expr) => panic!("unsupport expr, {:?}", expr),
             Err(err) => if code.len() % 2 == 0 && code.chars().all(|c| match c {
