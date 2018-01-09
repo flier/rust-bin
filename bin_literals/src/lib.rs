@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 #[macro_use]
 extern crate bin_literals_macros;
 #[macro_use]

@@ -13,7 +13,7 @@ define_proc_macros! {
             trimmed_input = input[1..].trim_left();
         }
         match parse_rust_bin_lit(trimmed_input, is_negative) {
-            Ok(value) => format!("const VALUE: &'static [u8] = {:?};", &value),
+            Ok(value) => format!("const VALUE: &'static [u8] = &{:?};", value.as_slice()),
             Err(e) => panic!("{}", e),
         }
     }

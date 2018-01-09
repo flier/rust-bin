@@ -1,27 +1,45 @@
 use std::{isize, slice, usize, f32, i16, i32, i64, i8, u16, u32, u64, u8};
 
 use syn;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::BufMut;
 use failure::Error;
 use byteorder::NativeEndian;
 use extprim::u128::{BYTES as U128_BYTES, u128};
 use extprim::i128::{BYTES as I128_BYTES, i128};
 use quote::ToTokens;
 
-pub fn parse_rust_bin_lit(code: &str, is_negative: bool) -> Result<Bytes, Error> {
-    let mut bytes = BytesMut::new();
+/// Parses a Rust literal into an actual binary type.
+///
+/// If `is_negative` is true, a negative sign will be added to the number before the conversion.
+///
+/// # Examples
+///
+/// ```rust
+/// use bin::traits::parse_rust_bin_lit;
+///
+/// assert_eq!(parse_rust_bin_lit("0, 1", false).unwrap(), &[0, 1]);
+/// assert_eq!(parse_rust_bin_lit("\"你好\"", false).unwrap(),
+///            &[228, 189, 160, 229, 165, 189]);
+/// assert_eq!(parse_rust_bin_lit("0b111", true).unwrap(), &[0xF9]);
+/// assert_eq!(parse_rust_bin_lit("3.14", true).unwrap(),
+///            &[195, 245, 72, 192]);
+/// ```
+pub fn parse_rust_bin_lit(code: &str, is_negative: bool) -> Result<Vec<u8>, Error> {
+    let mut bytes = vec![];
 
-    match syn::parse_str::<syn::Expr>(code)? {
-        syn::Expr::Lit(syn::ExprLit { lit, .. }) => {
-            parse_lit_expr(&mut bytes, lit, is_negative)?;
-        }
-        expr => panic!("unsupport expr, {:?}", expr),
-    };
+    for input in code.split(',').map(|s| s.trim()).collect::<Vec<&str>>() {
+        match syn::parse_str::<syn::Expr>(input)? {
+            syn::Expr::Lit(syn::ExprLit { lit, .. }) => {
+                parse_lit_expr(&mut bytes, lit, is_negative)?;
+            }
+            expr => panic!("unsupport expr, {:?}", expr),
+        };
+    }
 
-    Ok(bytes.freeze())
+    Ok(bytes)
 }
 
-fn parse_lit_expr(bytes: &mut BytesMut, lit: syn::Lit, is_negative: bool) -> Result<(), Error> {
+fn parse_lit_expr(bytes: &mut Vec<u8>, lit: syn::Lit, is_negative: bool) -> Result<(), Error> {
     match lit {
         syn::Lit::Str(s) => {
             bytes.put(s.value());
@@ -99,31 +117,29 @@ fn parse_lit_expr(bytes: &mut BytesMut, lit: syn::Lit, is_negative: bool) -> Res
                 } else {
                     bytes.put_u32::<NativeEndian>(v as u32);
                 },
-                syn::IntSuffix::None => {
-                    if is_negative {
-                        let v = v as i64;
+                syn::IntSuffix::None => if is_negative {
+                    let v = v as i64;
 
-                        if i8::MIN as i64 <= v && v <= i8::MAX as i64 {
-                            bytes.put_i8(v as i8)
-                        } else if i16::MIN as i64 <= v && v <= i16::MAX as i64 {
-                            bytes.put_i16::<NativeEndian>(v as i16)
-                        } else if i32::MIN as i64 <= v && v <= i32::MAX as i64 {
-                            bytes.put_i32::<NativeEndian>(v as i32)
-                        } else {
-                            bytes.put_i64::<NativeEndian>(v);
-                        }
+                    if i8::MIN as i64 <= v && v <= i8::MAX as i64 {
+                        bytes.put_i8(v as i8)
+                    } else if i16::MIN as i64 <= v && v <= i16::MAX as i64 {
+                        bytes.put_i16::<NativeEndian>(v as i16)
+                    } else if i32::MIN as i64 <= v && v <= i32::MAX as i64 {
+                        bytes.put_i32::<NativeEndian>(v as i32)
                     } else {
-                        if v <= u8::MAX as u64 {
-                            bytes.put_u8(v as u8);
-                        } else if v <= u16::MAX as u64 {
-                            bytes.put_u16::<NativeEndian>(v as u16);
-                        } else if v <= u32::MAX as u64 {
-                            bytes.put_u32::<NativeEndian>(v as u32);
-                        } else {
-                            bytes.put_u64::<NativeEndian>(v);
-                        }
+                        bytes.put_i64::<NativeEndian>(v);
                     }
-                }
+                } else {
+                    if v <= u8::MAX as u64 {
+                        bytes.put_u8(v as u8);
+                    } else if v <= u16::MAX as u64 {
+                        bytes.put_u16::<NativeEndian>(v as u16);
+                    } else if v <= u32::MAX as u64 {
+                        bytes.put_u32::<NativeEndian>(v as u32);
+                    } else {
+                        bytes.put_u64::<NativeEndian>(v);
+                    }
+                },
             }
         }
         syn::Lit::Float(f) => {
@@ -136,13 +152,11 @@ fn parse_lit_expr(bytes: &mut BytesMut, lit: syn::Lit, is_negative: bool) -> Res
             match f.suffix() {
                 syn::FloatSuffix::F32 => bytes.put_f32::<NativeEndian>(v as f32),
                 syn::FloatSuffix::F64 => bytes.put_f64::<NativeEndian>(v),
-                syn::FloatSuffix::None => {
-                    if v > f32::MAX as f64 {
-                        bytes.put_f64::<NativeEndian>(v)
-                    } else {
-                        bytes.put_f32::<NativeEndian>(v as f32)
-                    }
-                }
+                syn::FloatSuffix::None => if v > f32::MAX as f64 {
+                    bytes.put_f64::<NativeEndian>(v)
+                } else {
+                    bytes.put_f32::<NativeEndian>(v as f32)
+                },
             }
         }
         syn::Lit::Bool(b) => if b.value {

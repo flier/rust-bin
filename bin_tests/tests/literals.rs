@@ -39,6 +39,21 @@ const FLOAT64: &[u8] = bin![3.14e+39];
 const TRUE: &[u8] = bin![true];
 const FALSE: &[u8] = bin![false];
 
+const SLICE: &[u8] = bin![0x00, 0x01, 0x02, 0x03];
+const MIXED_SLICE: &[u8] = bin![
+    "hello",
+    "你好",
+    b"hello",
+    b'a',
+    'a',
+    '√',
+    128,
+    0x0123456789ABCDEF,
+    340_282_366_920_938_463_463_374_607_431_768_211_455u128,
+    3.14,
+    true
+];
+
 #[test]
 fn test_literal() {
     assert_eq!(STR, b"hello");
@@ -80,7 +95,10 @@ fn test_literal() {
 
     assert_eq!(
         bin![340_282_366_920_938_463_463_374_607_431_768_211_455],
-        &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,]
+        &[
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+            0xFF, 0xFF,
+        ]
     );
 
     assert_eq!(U8, &[0x80]);
@@ -118,4 +136,76 @@ fn test_literal() {
 
     assert_eq!(TRUE, &[1]);
     assert_eq!(FALSE, &[0]);
+}
+
+#[test]
+fn test_slice() {
+    assert_eq!(SLICE, &[0x00, 0x01, 0x02, 0x03]);
+    assert_eq!(
+        MIXED_SLICE,
+        &[
+            // "hello"
+            b'h',
+            b'e',
+            b'l',
+            b'l',
+            b'o',
+            // "您好"
+            228,
+            189,
+            160,
+            229,
+            165,
+            189,
+            // b"hello"
+            b'h',
+            b'e',
+            b'l',
+            b'l',
+            b'o',
+            // b'a'
+            b'a',
+            // 'a'
+            b'a',
+            // '√'
+            226,
+            136,
+            154,
+            // 128
+            128,
+            // 0x0123456789ABCDEF,
+            0xEF,
+            0xCD,
+            0xAB,
+            0x89,
+            0x67,
+            0x45,
+            0x23,
+            0x01,
+            // 340_282_366_920_938_463_463_374_607_431_768_211_455u128
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            0xFF,
+            // 3.14
+            195,
+            245,
+            72,
+            64,
+            // true
+            1
+        ][..]
+    );
 }
