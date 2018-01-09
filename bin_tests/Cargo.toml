@@ -1,0 +1,10 @@
+[package]
+name = "bin_tests"
+version = "0.1.0"
+authors = ["Flier Lu <flier.lu@gmail.com>"]
+
+[dev-dependencies]
+byteorder = "1.2"
+
+bin = { path = "../", version = "0.1" }
+bin_literals = { path = "../bin_literals", version = "0.1" }

@@ -1,0 +1,21 @@
+[package]
+name = "bin"
+version = "0.1.0"
+authors = ["Flier Lu <flier.lu@gmail.com>"]
+
+[dependencies]
+failure = "0.1"
+quote = "0.4"
+byteorder = "1.2"
+bytes = "0.4"
+extprim = "1.4"
+
+[dependencies.syn]
+version = "0.12"
+features = ["extra-traits"]
+
+[workspace]
+members = ["bin_literals", "bin_literals_macros", "bin_tests"]
+
+[dev-dependencies]
+bin_literals = { version = "0.1", path = "./bin_literals" }
