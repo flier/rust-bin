@@ -70,6 +70,22 @@ const RANGE: &[u8] = bin![(b'a'..=b'z'), (b'0'..=b'9')];
 const ARRAY: &[u8] = bin![[0, 1, 2, 3], [8000, 8080]];
 const TUPLE: &[u8] = bin![(0, 1, 2, 3), (8000, 8080)];
 
+const OPS: &[u8] = bin![
+    (
+        !0x80,
+        1 + 2,
+        2 - 1,
+        2 * 3,
+        4 / 2,
+        7 % 3,
+        33 ^ 0x80,
+        33 & 0xF0,
+        33 | 0x80,
+        1 << 4,
+        0x80 >> 3,
+    )
+];
+
 #[test]
 fn test_literal() {
     assert_eq!(STR, b"hello");
@@ -291,4 +307,24 @@ fn test_array() {
 #[test]
 fn test_tuple() {
     assert_eq!(TUPLE, &[0, 1, 2, 3, 0x40, 0x1F, 0x90, 0x1F]);
+}
+
+#[test]
+fn test_ops() {
+    assert_eq!(
+        OPS,
+        &[
+            !0x80,
+            1 + 2,
+            2 - 1,
+            2 * 3,
+            4 / 2,
+            7 % 3,
+            33 ^ 0x80,
+            33 & 0xF0,
+            33 | 0x80,
+            1 << 4,
+            0x80 >> 3
+        ]
+    );
 }

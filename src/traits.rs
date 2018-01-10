@@ -92,7 +92,16 @@ where
             Ok(())
         }
         syn::Expr::Paren(syn::ExprParen { ref expr, .. }) => parse_expr::<E>(bytes, expr, false),
-        ref expr => panic!("unsupport expr, {:?}", expr),
+        syn::Expr::Unary(syn::ExprUnary { op, ref expr, .. }) => {
+            parse_unary_expr::<E>(bytes, op, expr)
+        }
+        syn::Expr::Binary(syn::ExprBinary {
+            ref left,
+            op,
+            ref right,
+            ..
+        }) => parse_bin_expr::<E>(bytes, left, op, right),
+        ref expr => bail!("unsupport expr, {:?}", expr),
     }
 }
 
@@ -271,6 +280,99 @@ where
         syn::RangeLimits::HalfOpen(_) => bytes.extend((from..to).map(|b| b as u8)),
         syn::RangeLimits::Closed(_) => bytes.extend((from..to + 1).map(|b| b as u8)),
     }
+
+    Ok(())
+}
+
+fn parse_unary_expr<E>(bytes: &mut Vec<u8>, op: syn::UnOp, expr: &syn::Expr) -> Result<(), Error>
+where
+    E: ByteOrder,
+{
+    match op {
+        syn::UnOp::Neg(_) => {
+            let n = eval_const_expr_as_num::<i64>(expr)?;
+
+            if let Some(v) = n.checked_neg() {
+                if i8::MIN as i64 <= v {
+                    bytes.put_i8(v as i8)
+                } else if i16::MIN as i64 <= v {
+                    bytes.put_i16::<E>(v as i16)
+                } else if i32::MIN as i64 <= v {
+                    bytes.put_i32::<E>(v as i32)
+                } else {
+                    bytes.put_i64::<E>(v);
+                }
+            } else {
+                bail!("neg overflow")
+            }
+        }
+        syn::UnOp::Not(_) => {
+            let v = eval_const_expr_as_num::<u64>(expr)?;
+
+            if v <= u8::MAX as u64 {
+                bytes.put_u8(!v as u8);
+            } else if v <= u16::MAX as u64 {
+                bytes.put_u16::<E>(!v as u16);
+            } else if v <= u32::MAX as u64 {
+                bytes.put_u32::<E>(!v as u32);
+            } else {
+                bytes.put_u64::<E>(!v);
+            }
+        }
+        _ => bail!("unsupport unary op: {:?}", op),
+    }
+
+    Ok(())
+}
+
+fn parse_bin_expr<E>(
+    bytes: &mut Vec<u8>,
+    left: &syn::Expr,
+    op: syn::BinOp,
+    right: &syn::Expr,
+) -> Result<(), Error>
+where
+    E: ByteOrder,
+{
+    if let Some(v) =
+        match op {
+            syn::BinOp::Add(_) => eval_const_expr_as_num::<u64>(left)?
+                .checked_add(eval_const_expr_as_num::<u64>(right)?),
+            syn::BinOp::Sub(_) => eval_const_expr_as_num::<u64>(left)?
+                .checked_sub(eval_const_expr_as_num::<u64>(right)?),
+            syn::BinOp::Mul(_) => eval_const_expr_as_num::<u64>(left)?
+                .checked_mul(eval_const_expr_as_num::<u64>(right)?),
+            syn::BinOp::Div(_) => eval_const_expr_as_num::<u64>(left)?
+                .checked_div(eval_const_expr_as_num::<u64>(right)?),
+            syn::BinOp::Rem(_) => eval_const_expr_as_num::<u64>(left)?
+                .checked_rem(eval_const_expr_as_num::<u64>(right)?),
+            syn::BinOp::BitXor(_) => {
+                Some(eval_const_expr_as_num::<u64>(left)? ^ eval_const_expr_as_num::<u64>(right)?)
+            }
+            syn::BinOp::BitAnd(_) => {
+                Some(eval_const_expr_as_num::<u64>(left)? & eval_const_expr_as_num::<u64>(right)?)
+            }
+            syn::BinOp::BitOr(_) => {
+                Some(eval_const_expr_as_num::<u64>(left)? | eval_const_expr_as_num::<u64>(right)?)
+            }
+            syn::BinOp::Shl(_) => eval_const_expr_as_num::<u64>(left)?
+                .checked_shl(eval_const_expr_as_num::<u32>(right)?),
+            syn::BinOp::Shr(_) => eval_const_expr_as_num::<u64>(left)?
+                .checked_shr(eval_const_expr_as_num::<u32>(right)?),
+            _ => bail!("unsupport binary op: {:?}", op),
+        } {
+        if v <= u8::MAX as u64 {
+            bytes.put_u8(v as u8);
+        } else if v <= u16::MAX as u64 {
+            bytes.put_u16::<E>(v as u16);
+        } else if v <= u32::MAX as u64 {
+            bytes.put_u32::<E>(v as u32);
+        } else {
+            bytes.put_u64::<E>(v);
+        }
+    } else {
+        bail!("binary op overflow: {:?}", op)
+    };
 
     Ok(())
 }
