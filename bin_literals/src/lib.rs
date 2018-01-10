@@ -35,4 +35,52 @@ macro_rules! bin {
             VALUE
         }
     };
+    (hex! $e:tt) => {
+        {
+            internal_bin_literals_macros_invoke! {
+                internal_hex_literals_macros!($e)
+            }
+            VALUE
+        }
+    };
+    ($e:tt ==) => {
+        {
+            internal_bin_literals_macros_invoke! {
+                internal_base64_literals_macros!( $e )
+            }
+            VALUE
+        }
+    };
+    ( $e:tt =) => {
+        {
+            internal_bin_literals_macros_invoke! {
+                internal_base64_literals_macros!( $e )
+            }
+            VALUE
+        }
+    };
+    (base64! $e:tt ==) => {
+        {
+            internal_bin_literals_macros_invoke! {
+                internal_base64_literals_macros!( $e )
+            }
+            VALUE
+        }
+    };
+    (base64! $e:tt =) => {
+        {
+            internal_bin_literals_macros_invoke! {
+                internal_base64_literals_macros!( $e )
+            }
+            VALUE
+        }
+    };
+    (base64! $e:tt) => {
+        {
+            internal_bin_literals_macros_invoke! {
+                internal_base64_literals_macros!( $e )
+            }
+            VALUE
+        }
+    };
 }

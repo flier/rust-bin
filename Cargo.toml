@@ -12,7 +12,7 @@ extprim = "1.4"
 
 [dependencies.syn]
 version = "0.12"
-features = ["extra-traits"]
+features = ["full", "extra-traits"]
 
 [workspace]
 members = ["bin_literals", "bin_literals_macros", "bin_tests"]

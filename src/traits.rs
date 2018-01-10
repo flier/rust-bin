@@ -1,9 +1,11 @@
-use std::{isize, slice, usize, f32, i16, i32, i64, i8, u16, u32, u64, u8};
+use std::slice;
+use std::iter;
+use std::{isize, usize, f32, i16, i32, i64, i8, u16, u32, u64, u8};
 
 use syn;
 use bytes::BufMut;
-use failure::Error;
-use byteorder::ByteOrder;
+use failure::{Error, Fail};
+use byteorder::{BigEndian, ByteOrder};
 use extprim::u128::{BYTES as U128_BYTES, u128};
 use extprim::i128::{BYTES as I128_BYTES, i128};
 use quote::ToTokens;
@@ -41,52 +43,66 @@ where
     let mut bytes = vec![];
 
     for input in code.split(',').map(|s| s.trim()).collect::<Vec<&str>>() {
-        match syn::parse_str::<syn::Expr>(input) {
-            Ok(syn::Expr::Lit(syn::ExprLit { lit, .. })) => {
-                parse_lit_expr::<E>(&mut bytes, lit, is_negative)?;
-            }
-            Ok(expr) => panic!("unsupport expr, {:?}", expr),
-            Err(err) => if input.len() % 2 == 0 && input.chars().all(|c| match c {
-                '0'...'9' | 'a'...'f' | 'A'...'F' => true,
-                _ => false,
-            }) {
-                let mut chars = input.chars();
+        if input.is_empty() {
+            continue;
+        }
 
-                while let (Some(hi), Some(lo)) = (
-                    chars.next().and_then(|c| c.to_digit(16)),
-                    chars.next().and_then(|c| c.to_digit(16)),
-                ) {
-                    bytes.push(((hi << 4) + lo) as u8);
-                }
-            } else {
-                panic!("unknown syntax, {}", err)
-            },
+        match syn::parse_str::<syn::Expr>(input) {
+            Ok(expr) => {
+                parse_expr::<E>(&mut bytes, &expr, is_negative)?;
+            }
+            Err(err) => parse_raw_hex_literal(&mut bytes, input)
+                .or_else(|_| parse_raw_base64_literal(&mut bytes, input))
+                .map_err(|_| err.context("unknown syntax"))?,
         };
     }
 
     Ok(bytes)
 }
 
-fn parse_lit_expr<E>(bytes: &mut Vec<u8>, lit: syn::Lit, is_negative: bool) -> Result<(), Error>
+fn parse_expr<E>(bytes: &mut Vec<u8>, expr: &syn::Expr, is_negative: bool) -> Result<(), Error>
 where
     E: ByteOrder,
 {
-    match lit {
-        syn::Lit::Str(s) => {
+    match *expr {
+        syn::Expr::Lit(syn::ExprLit { ref lit, .. }) => {
+            parse_lit_expr::<E>(bytes, lit, is_negative)?;
+        }
+        syn::Expr::Repeat(syn::ExprRepeat {
+            ref expr, ref len, ..
+        }) => {
+            let mut value = vec![];
+
+            parse_expr::<E>(&mut value, &expr, false)?;
+
+            bytes.extend(value);
+        }
+        ref expr => panic!("unsupport expr, {:?}", expr),
+    }
+
+    Ok(())
+}
+
+fn parse_lit_expr<E>(bytes: &mut Vec<u8>, lit: &syn::Lit, is_negative: bool) -> Result<(), Error>
+where
+    E: ByteOrder,
+{
+    match *lit {
+        syn::Lit::Str(ref s) => {
             bytes.put(s.value());
         }
-        syn::Lit::ByteStr(s) => {
+        syn::Lit::ByteStr(ref s) => {
             bytes.put(s.value());
         }
-        syn::Lit::Byte(b) => {
+        syn::Lit::Byte(ref b) => {
             bytes.put(b.value());
         }
-        syn::Lit::Char(c) => {
+        syn::Lit::Char(ref c) => {
             let mut buf = [0; 4];
 
             bytes.put(c.value().encode_utf8(&mut buf).as_bytes());
         }
-        syn::Lit::Int(i) => {
+        syn::Lit::Int(ref i) => {
             let v = if is_negative {
                 i.value().wrapping_neg()
             } else {
@@ -173,8 +189,12 @@ where
                 },
             }
         }
-        syn::Lit::Float(f) => {
-            let v = if is_negative { -f.value() } else { f.value() };
+        syn::Lit::Float(ref f) => {
+            let v = if is_negative {
+                -f.value()
+            } else {
+                f.value()
+            };
 
             match f.suffix() {
                 syn::FloatSuffix::F32 => bytes.put_f32::<E>(v as f32),
@@ -186,12 +206,12 @@ where
                 },
             }
         }
-        syn::Lit::Bool(b) => if b.value {
+        syn::Lit::Bool(ref b) => if b.value {
             bytes.put(1u8);
         } else {
             bytes.put(0u8);
         },
-        syn::Lit::Verbatim(v) => {
+        syn::Lit::Verbatim(ref v) => {
             let s = v.into_tokens().to_string().replace('_', "");
             let mut v: u128 = s.split(|b| b == 'i' || b == 'u').next().unwrap().parse()?;
 
@@ -199,11 +219,161 @@ where
                 v = v.wrapping_neg()
             }
 
-            bytes.put(unsafe {
-                slice::from_raw_parts(&v as *const u128 as *const u8, U128_BYTES)
-            });
+            bytes.put(unsafe { slice::from_raw_parts(&v as *const u128 as *const u8, U128_BYTES) });
         }
     }
 
     Ok(())
+}
+
+pub fn parse_raw_hex_literal(bytes: &mut Vec<u8>, input: &str) -> Result<(), Error> {
+    if input.len() % 2 == 0 && input.chars().all(|c| match c {
+        '0'...'9' | 'a'...'f' | 'A'...'F' => true,
+        _ => false,
+    }) {
+        let mut chars = input.chars();
+
+        while let (Some(hi), Some(lo)) = (
+            chars.next().and_then(|c| c.to_digit(16)),
+            chars.next().and_then(|c| c.to_digit(16)),
+        ) {
+            bytes.push(((hi << 4) + lo) as u8);
+        }
+
+        Ok(())
+    } else {
+        bail!("illegel hex literal");
+    }
+}
+
+const BASE64_CHUNK_SIZE: usize = 4;
+const BASE64_INDEX_TABLE: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+pub fn parse_raw_base64_literal(bytes: &mut Vec<u8>, input: &str) -> Result<(), Error> {
+    if (input.as_bytes().len() % BASE64_CHUNK_SIZE) != 1
+        && input.as_bytes().iter().all(|&b| match b {
+            b'A'...b'Z' | b'a'...b'z' | b'0'...b'9' | b'+' | b'/' | b'=' => true,
+            _ => false,
+        }) {
+        let mut chunks = input.as_bytes().chunks(BASE64_CHUNK_SIZE);
+
+        while let Some(chunk) = chunks.next() {
+            let n = chunk
+                .iter()
+                .cloned()
+                .chain(iter::repeat(b'='))
+                .take(4)
+                .map(|b| BASE64_INDEX_TABLE.iter().position(|&x| x == b).unwrap_or(0))
+                .fold(0u64, |acc, v| acc.wrapping_shl(6) + v as u64);
+
+            let (n, l) = match chunk.iter().cloned().take_while(|&b| b != b'=').count() {
+                1 | 2 => (n.wrapping_shr(16) & 0xFF, 1),
+                3 => (n.wrapping_shr(8) & 0xFFFF, 2),
+                _ => (n, 3),
+            };
+
+            let mut v = vec![0; l];
+
+            BigEndian::write_uint(&mut v, n as u64, l);
+
+            bytes.extend(v)
+        }
+
+        Ok(())
+    } else {
+        bail!("illegel base64 literal");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_raw_hex_literal() {
+        let mut v = vec![];
+
+        assert!(
+            parse_raw_hex_literal(
+                &mut v,
+                "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+            ).is_ok()
+        );
+        assert_eq!(
+            &v,
+            &[
+                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+                0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+                0x1c, 0x1d, 0x1e, 0x1f,
+            ]
+        );
+
+        v.clear();
+
+        assert!(parse_raw_hex_literal(&mut v, "").is_ok());
+        assert!(v.is_empty());
+
+        assert!(parse_raw_hex_literal(&mut v, "123").is_err());
+        assert!(parse_raw_hex_literal(&mut v, "123+").is_err());
+    }
+
+    #[test]
+    fn test_parse_raw_base64_literal() {
+        let mut v = vec![];
+
+        assert!(
+            parse_raw_base64_literal(
+                &mut v,
+                "TWFuIGlzIGRpc3Rpbmd1aXNoZWQsIG5vdCBvbmx5IGJ5IGhpcyByZWFzb24sIGJ1dCBieSB0aGlzIHNpbmd1bGFyIHBhc3Npb24gZnJvbSBvdGhlciBhbmltYWxzLCB3aGljaCBpcyBhIGx1c3Qgb2YgdGhlIG1pbmQsIHRoYXQgYnkgYSBwZXJzZXZlcmFuY2Ugb2YgZGVsaWdodCBpbiB0aGUgY29udGludWVkIGFuZCBpbmRlZmF0aWdhYmxlIGdlbmVyYXRpb24gb2Yga25vd2xlZGdlLCBleGNlZWRzIHRoZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm5hbCBwbGVhc3VyZS4="
+            ).is_ok()
+        );
+        assert_eq!(
+            v.as_slice(),
+            &b"Man is distinguished, not only by his reason, but by this singular passion from other animals, which is a lust of the mind, that by a perseverance of delight in the continued and indefatigable generation of knowledge, exceeds the short vehemence of any carnal pleasure."[..]
+        );
+
+        // Decoding Base64 with padding
+        //
+        // When decoding Base64 text, four characters are typically converted back to three bytes.
+        // The only exceptions are when padding characters exist.
+        // A single '=' indicates that the four characters will decode to only two bytes,
+        // while '==' indicates that the four characters will decode to only a single byte.
+        //
+        // For example:
+
+        v.clear();
+        assert!(parse_raw_base64_literal(&mut v, "YW55IGNhcm5hbCBwbGVhcw==").is_ok());
+        assert_eq!(v.as_slice(), b"any carnal pleas");
+
+        v.clear();
+        assert!(parse_raw_base64_literal(&mut v, "YW55IGNhcm5hbCBwbGVhc3U=").is_ok());
+        assert_eq!(v.as_slice(), b"any carnal pleasu");
+
+        v.clear();
+        assert!(parse_raw_base64_literal(&mut v, "YW55IGNhcm5hbCBwbGVhc3Vy").is_ok());
+        assert_eq!(v.as_slice(), b"any carnal pleasur");
+
+        // Decoding Base64 without padding
+        //
+        // Without padding, after normal decoding of four characters to three bytes over and over again,
+        // less than four encoded characters may remain. In this situation only two or three characters shall remain.
+        // A single remaining encoded character is not possible (because a single base 64 character only contains 6 bits,
+        // and 8 bits are required to create a byte, so a minimum of 2 base 64 characters are required :
+        // the first character contributes 6 bits, and the second character contributes its first 2 bits) .
+        //
+        // For example:
+
+        v.clear();
+        assert!(parse_raw_base64_literal(&mut v, "YW55IGNhcm5hbCBwbGVhcw").is_ok());
+        assert_eq!(v.as_slice(), b"any carnal pleas");
+
+        v.clear();
+        assert!(parse_raw_base64_literal(&mut v, "YW55IGNhcm5hbCBwbGVhc3U").is_ok());
+        assert_eq!(v.as_slice(), b"any carnal pleasu");
+
+        v.clear();
+        assert!(parse_raw_base64_literal(&mut v, "YW55IGNhcm5hbCBwbGVhc3Vy").is_ok());
+        assert_eq!(v.as_slice(), b"any carnal pleasur");
+    }
 }
