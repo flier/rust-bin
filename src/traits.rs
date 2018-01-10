@@ -4,7 +4,7 @@ use std::{isize, usize, f32, i16, i32, i64, i8, u16, u32, u64, u8};
 
 use syn;
 use bytes::BufMut;
-use failure::{Error, Fail};
+use failure::Error;
 use byteorder::{BigEndian, ByteOrder};
 use extprim::u128::{BYTES as U128_BYTES, u128};
 use extprim::i128::{BYTES as I128_BYTES, i128};
@@ -43,22 +43,24 @@ where
 {
     let mut bytes = vec![];
 
-    for input in code.split(',').map(|s| s.trim()).collect::<Vec<&str>>() {
-        if input.is_empty() {
-            continue;
-        }
-
-        match syn::parse_str::<syn::Expr>(input) {
-            Ok(expr) => {
-                parse_expr::<E>(&mut bytes, &expr, is_negative)?;
+    syn::parse_str::<syn::Expr>(code)
+        .or_else(|_| syn::parse_str::<syn::Expr>(format!("({})", code).as_str()))
+        .map_err(|err| Error::from(err))
+        .and_then(|expr| parse_expr::<E>(&mut bytes, &expr, is_negative))
+        .or_else(|_| {
+            for input in code.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                syn::parse_str::<syn::Expr>(input)
+                    .or_else(|_| syn::parse_str::<syn::Expr>(format!("({})", code).as_str()))
+                    .map_err(|err| Error::from(err))
+                    .and_then(|expr| parse_expr::<E>(&mut bytes, &expr, is_negative))
+                    .or_else(|_| parse_raw_hex_literal(&mut bytes, input))
+                    .or_else(|_| parse_raw_base64_literal(&mut bytes, input))
+                    .or_else(|_| bail!("syntax error: {}", input))?;
             }
-            Err(err) => parse_raw_hex_literal(&mut bytes, input)
-                .or_else(|_| parse_raw_base64_literal(&mut bytes, input))
-                .map_err(|_| err.context("unknown syntax"))?,
-        };
-    }
 
-    Ok(bytes)
+            Ok(())
+        })
+        .map(|_| bytes)
 }
 
 fn parse_expr<E>(bytes: &mut Vec<u8>, expr: &syn::Expr, is_negative: bool) -> Result<(), Error>
@@ -71,20 +73,25 @@ where
         }
         syn::Expr::Repeat(syn::ExprRepeat {
             ref expr, ref len, ..
-        }) => {
-            parse_repeat_expr::<E>(bytes, expr, len)
-        }
+        }) => parse_repeat_expr::<E>(bytes, expr, len),
         syn::Expr::Range(syn::ExprRange {
-            ref from, ref to, ..
+            ref from,
+            limits,
+            ref to,
+            ..
         }) if from.is_some() && to.is_some() =>
         {
-            parse_range_expr::<E>(bytes, from.as_ref().unwrap(), to.as_ref().unwrap())
+            parse_range_expr::<E>(bytes, from.as_ref().unwrap(), limits, to.as_ref().unwrap())
         }
-        syn::Expr::Paren(syn::ExprParen {
-            ref expr, ..
-        }) => {
-            parse_expr::<E>(bytes, expr, is_negative)
+        syn::Expr::Array(syn::ExprArray { ref elems, .. })
+        | syn::Expr::Tuple(syn::ExprTuple { ref elems, .. }) => {
+            for element in elems {
+                parse_expr::<E>(bytes, element, false)?;
+            }
+
+            Ok(())
         }
+        syn::Expr::Paren(syn::ExprParen { ref expr, .. }) => parse_expr::<E>(bytes, expr, false),
         ref expr => panic!("unsupport expr, {:?}", expr),
     }
 }
@@ -248,14 +255,22 @@ where
     Ok(())
 }
 
-fn parse_range_expr<E>(bytes: &mut Vec<u8>, from: &syn::Expr, to: &syn::Expr) -> Result<(), Error>
+fn parse_range_expr<E>(
+    bytes: &mut Vec<u8>,
+    from: &syn::Expr,
+    limits: syn::RangeLimits,
+    to: &syn::Expr,
+) -> Result<(), Error>
 where
     E: ByteOrder,
 {
-    let from = eval_const_expr_as_num::<u8>(from)?;
-    let to = eval_const_expr_as_num::<u8>(to)?;
+    let from = eval_const_expr_as_num::<u16>(from)?;
+    let to = eval_const_expr_as_num::<u16>(to)?;
 
-    bytes.extend(from..to);
+    match limits {
+        syn::RangeLimits::HalfOpen(_) => bytes.extend((from..to).map(|b| b as u8)),
+        syn::RangeLimits::Closed(_) => bytes.extend((from..to + 1).map(|b| b as u8)),
+    }
 
     Ok(())
 }
