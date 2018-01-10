@@ -65,6 +65,9 @@ const HEX_WITH_TAG: &[u8] = bin![
 const BASE64: &[u8] = bin![YW55IGNhcm5hbCBwbGVhc3VyZQ==];
 const BASE64_WITH_TAG: &[u8] = bin![base64!YW55IGNhcm5hbCBwbGVhc3VyZQ==];
 
+const REPEAT: &[u8] = bin![[0xFF; 8], [0; 4]];
+const RANGE: &[u8] = bin![(b'a'..b'z'), (b'0'..b'9')];
+
 #[test]
 fn test_literal() {
     assert_eq!(STR, b"hello");
@@ -190,85 +193,6 @@ fn test_literal() {
 
     assert_eq!(TRUE, &[1]);
     assert_eq!(FALSE, &[0]);
-
-    assert_eq!(
-        HEX,
-        &[
-            0x00,
-            0x01,
-            0x02,
-            0x03,
-            0x04,
-            0x05,
-            0x06,
-            0x07,
-            0x08,
-            0x09,
-            0x0a,
-            0x0b,
-            0x0c,
-            0x0d,
-            0x0e,
-            0x0f,
-            0x10,
-            0x11,
-            0x12,
-            0x13,
-            0x14,
-            0x15,
-            0x16,
-            0x17,
-            0x18,
-            0x19,
-            0x1a,
-            0x1b,
-            0x1c,
-            0x1d,
-            0x1e,
-            0x1f
-        ]
-    );
-
-    assert_eq!(
-        HEX_WITH_TAG,
-        &[
-            0x00,
-            0x01,
-            0x02,
-            0x03,
-            0x04,
-            0x05,
-            0x06,
-            0x07,
-            0x08,
-            0x09,
-            0x0a,
-            0x0b,
-            0x0c,
-            0x0d,
-            0x0e,
-            0x0f,
-            0x10,
-            0x11,
-            0x12,
-            0x13,
-            0x14,
-            0x15,
-            0x16,
-            0x17,
-            0x18,
-            0x19,
-            0x1a,
-            0x1b,
-            0x1c,
-            0x1d,
-            0x1e,
-            0x1f
-        ]
-    );
-
-    assert_eq!(BASE64, b"any carnal pleasure");
-    assert_eq!(BASE64_WITH_TAG, b"any carnal pleasure");
 }
 
 #[test]
@@ -358,4 +282,99 @@ fn test_slice() {
             0x0f
         ][..]
     );
+
+    #[test]
+    fn test_encode() {
+        assert_eq!(
+            HEX,
+            &[
+                0x00,
+                0x01,
+                0x02,
+                0x03,
+                0x04,
+                0x05,
+                0x06,
+                0x07,
+                0x08,
+                0x09,
+                0x0a,
+                0x0b,
+                0x0c,
+                0x0d,
+                0x0e,
+                0x0f,
+                0x10,
+                0x11,
+                0x12,
+                0x13,
+                0x14,
+                0x15,
+                0x16,
+                0x17,
+                0x18,
+                0x19,
+                0x1a,
+                0x1b,
+                0x1c,
+                0x1d,
+                0x1e,
+                0x1f
+            ]
+        );
+
+        assert_eq!(
+            HEX_WITH_TAG,
+            &[
+                0x00,
+                0x01,
+                0x02,
+                0x03,
+                0x04,
+                0x05,
+                0x06,
+                0x07,
+                0x08,
+                0x09,
+                0x0a,
+                0x0b,
+                0x0c,
+                0x0d,
+                0x0e,
+                0x0f,
+                0x10,
+                0x11,
+                0x12,
+                0x13,
+                0x14,
+                0x15,
+                0x16,
+                0x17,
+                0x18,
+                0x19,
+                0x1a,
+                0x1b,
+                0x1c,
+                0x1d,
+                0x1e,
+                0x1f
+            ]
+        );
+
+        assert_eq!(BASE64, b"any carnal pleasure");
+        assert_eq!(BASE64_WITH_TAG, b"any carnal pleasure");
+    }
+
+    #[test]
+    fn test_repeat() {
+        assert_eq!(
+            REPEAT,
+            &[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn test_range() {
+        assert_eq!(RANGE, &b"abcdefghijklmnopqrstuvwxyz0123456789"[..]);
+    }
 }

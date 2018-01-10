@@ -9,6 +9,7 @@ use byteorder::{BigEndian, ByteOrder};
 use extprim::u128::{BYTES as U128_BYTES, u128};
 use extprim::i128::{BYTES as I128_BYTES, i128};
 use quote::ToTokens;
+use num::FromPrimitive;
 
 /// Parses a Rust literal into an actual binary type.
 ///
@@ -66,21 +67,26 @@ where
 {
     match *expr {
         syn::Expr::Lit(syn::ExprLit { ref lit, .. }) => {
-            parse_lit_expr::<E>(bytes, lit, is_negative)?;
+            parse_lit_expr::<E>(bytes, lit, is_negative)
         }
         syn::Expr::Repeat(syn::ExprRepeat {
             ref expr, ref len, ..
         }) => {
-            let mut value = vec![];
-
-            parse_expr::<E>(&mut value, &expr, false)?;
-
-            bytes.extend(value);
+            parse_repeat_expr::<E>(bytes, expr, len)
+        }
+        syn::Expr::Range(syn::ExprRange {
+            ref from, ref to, ..
+        }) if from.is_some() && to.is_some() =>
+        {
+            parse_range_expr::<E>(bytes, from.as_ref().unwrap(), to.as_ref().unwrap())
+        }
+        syn::Expr::Paren(syn::ExprParen {
+            ref expr, ..
+        }) => {
+            parse_expr::<E>(bytes, expr, is_negative)
         }
         ref expr => panic!("unsupport expr, {:?}", expr),
     }
-
-    Ok(())
 }
 
 fn parse_lit_expr<E>(bytes: &mut Vec<u8>, lit: &syn::Lit, is_negative: bool) -> Result<(), Error>
@@ -224,6 +230,57 @@ where
     }
 
     Ok(())
+}
+
+fn parse_repeat_expr<E>(bytes: &mut Vec<u8>, expr: &syn::Expr, len: &syn::Expr) -> Result<(), Error>
+where
+    E: ByteOrder,
+{
+    let len = eval_const_expr_as_num::<usize>(&len)?;
+    let mut value = vec![];
+
+    parse_expr::<E>(&mut value, &expr, false)?;
+
+    for _ in 0..len {
+        bytes.extend_from_slice(&value);
+    }
+
+    Ok(())
+}
+
+fn parse_range_expr<E>(bytes: &mut Vec<u8>, from: &syn::Expr, to: &syn::Expr) -> Result<(), Error>
+where
+    E: ByteOrder,
+{
+    let from = eval_const_expr_as_num::<u8>(from)?;
+    let to = eval_const_expr_as_num::<u8>(to)?;
+
+    bytes.extend(from..to);
+
+    Ok(())
+}
+
+fn eval_const_expr_as_num<T>(expr: &syn::Expr) -> Result<T, Error>
+where
+    T: FromPrimitive,
+{
+    if let syn::Expr::Lit(syn::ExprLit { ref lit, .. }) = *expr {
+        match *lit {
+            syn::Lit::Byte(ref b) => {
+                if let Some(n) = T::from_u8(b.value()) {
+                    return Ok(n);
+                }
+            }
+            syn::Lit::Int(ref i) => {
+                if let Some(n) = T::from_u64(i.value()) {
+                    return Ok(n);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    bail!("unsupport expr, {:?}", expr)
 }
 
 pub fn parse_raw_hex_literal(bytes: &mut Vec<u8>, input: &str) -> Result<(), Error> {
