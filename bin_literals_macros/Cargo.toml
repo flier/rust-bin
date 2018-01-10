@@ -6,6 +6,8 @@ authors = ["Flier Lu <flier.lu@gmail.com>"]
 [dependencies]
 byteorder = "1.2"
 procedural-masquerade = "0.1"
+quote = "0.4"
+proc-macro2 = "0.2"
 
 bin = { path = "../", version = "0.1" }
 
